@@ -1,0 +1,72 @@
+---
+- hosts: localhost
+  become: yes
+  
+  tasks:
+  - name: Update all packages to their latest version
+    apt:
+      name: "*"
+      state: latest
+  
+  - name: Install OpenJDK 1.8
+    apt:
+      name: openjdk-8-jre
+      state: present
+
+  - name: Create a directory named app if not exist
+    file:
+      path: /app
+      state: directory
+
+  - name: Download and unpack Nexus  
+    unarchive:
+      src: https://download.sonatype.com/nexus/3/latest-unix.tar.gz
+      dest: /app
+      remote_src: yes
+    
+  - name: Make sure if file exist
+    stat: path=/app/nexus-3.38.0-01 
+    register: file_stat
+
+  - name: Rename 
+    command: mv /app/nexus-3.38.0-01 /app/nexus
+    when: file_stat.stat.exists
+
+  - name: Ensure Nexus o/s group exists
+    group: name=nexus state=present
+    when: true | bool
+    
+
+  - name: Ensure Nexus o/s user exists
+    user: name=nexus group=nexus shell=/bin/bash state=present
+    when: true
+  
+  - name: Change file ownership, group and permissions
+    file:
+      path: /app
+      owner: nexus
+      group: nexus
+      mode: '0644'
+
+  - name: Change run user
+    replace:
+      path: /app/nexus/bin/nexus.rc
+      regexp: '#run_as_user=""'
+      replace: 'run_as_user="nexus"'
+
+  - name: Copy file with owner and permissions
+    copy:
+      src: nexus.service
+      dest: /etc/systemd/system/nexus.service
+      owner: nexus
+      group: nexus
+      mode: '0644'
+
+  - name: Register service with chkconfig system
+    service: name=nexus enabled=yes
+  
+  - name: Start service nexus
+    service:
+      name: nexus
+      state: started
+      
